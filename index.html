@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Vikrant Chat</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:0;padding:16px;background:#f7f7fb}
+    .card{max-width:720px;margin:0 auto;background:#fff;padding:16px;border-radius:10px;box-shadow:0 6px 18px rgba(0,0,0,0.06)}
+    #messages{height:300px;overflow:auto;border:1px solid #eee;padding:8px;border-radius:8px;margin-bottom:12px}
+    .msg{padding:6px 8px;border-radius:6px;margin-bottom:6px;background:#f1f7ff}
+    form{display:flex;gap:8px}
+    input,button{padding:8px;border-radius:6px;border:1px solid #ddd}
+    button{cursor:pointer}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>💬 Vikrant Simple Chat</h2>
+    <div id="messages">Loading...</div>
+
+    <form id="sendForm">
+      <input id="nameInput" placeholder="Apna naam" required />
+      <input id="msgInput" placeholder="Type message..." required />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+
+  <!-- Supabase JS via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <script>
+    // Tumhara Supabase config 👇
+    const SUPABASE_URL  = "https://unxzmzcuhbmgwjovsoot.supabase.co";
+    const SUPABASE_KEY  = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVueHptemN1aGJtZ3dqb3Zzb290Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTcwNDY1NzgsImV4cCI6MjA3MjYyMjU3OH0.yeHlQCLWcGwGVN8_4rKYUJYVSKrMUd73QR8eeVBMNQo";
+
+    const { createClient } = supabase;
+    const supabaseClient = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const messagesEl = document.getElementById('messages');
+    const nameInput = document.getElementById('nameInput');
+    const msgInput  = document.getElementById('msgInput');
+    const sendForm  = document.getElementById('sendForm');
+
+    function appendMessage(rec){
+      const d = document.createElement('div');
+      d.className = 'msg';
+      const time = new Date(rec.created_at).toLocaleTimeString();
+      d.innerHTML = `<strong>${escapeHtml(rec.name)}</strong> <small>${time}</small><div>${escapeHtml(rec.message)}</div>`;
+      messagesEl.appendChild(d);
+      messagesEl.scrollTop = messagesEl.scrollHeight;
+    }
+
+    function escapeHtml(s){ 
+      return (s+'').replace(/[&<>"']/g, c => (
+        {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]
+      )); 
+    }
+
+    async function loadMessages(){
+      const { data, error } = await supabaseClient
+        .from('messages')
+        .select('*')
+        .order('created_at', { ascending: true })
+        .limit(200);
+      messagesEl.innerHTML = '';
+      if (error) { messagesEl.textContent = 'Error loading messages'; console.error(error); return; }
+      data.forEach(appendMessage);
+    }
+
+    supabaseClient
+      .channel('public:messages')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, ({ new: row }) => {
+        appendMessage(row);
+      })
+      .subscribe();
+
+    sendForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = nameInput.value.trim() || 'Anonymous';
+      const message = msgInput.value.trim();
+      if (!message) return;
+      const { error } = await supabaseClient
+        .from('messages')
+        .insert([{ name, message }]);
+      if (error) {
+        alert('Send failed: ' + error.message);
+        console.error(error);
+      } else {
+        msgInput.value = '';
+      }
+    });
+
+    loadMessages();
+  </script>
+</body>
+</html>
